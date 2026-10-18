@@ -27,10 +27,8 @@ try {
 app.use('/uploads', express.static(uploadDir));
 
 // Multer Storage Setup for Notifications Image
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, uploadDir),
-    filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
-});
+// Memory storage for Vercel serverless environment
+const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 app.use(session({
@@ -116,9 +114,21 @@ app.post('/api/logout', (req, res) => {
 
 app.post('/api/notification', requireAuth, upload.single('image'), async (req, res) => {
     const { title, desc } = req.body;
-    const imagePath = req.file ? `/uploads/${req.file.filename}` : '';
-    const item = await NotifModel.create({ title, desc, image: imagePath });
-    res.json({ success: true, item: { id: item._id, title, desc, image: imagePath } });
+    let imagePath = '';
+
+    if (req.file) {
+        // Convert uploaded file to Base64 data string for Vercel cloud persistence
+        const mimeType = req.file.mimetype || 'image/png';
+        imagePath = `data:${mimeType};base64,${req.file.buffer.toString('base64')}`;
+    }
+
+    try {
+        const item = await NotifModel.create({ title, desc, image: imagePath });
+        res.json({ success: true, item: { id: item._id, title, desc, image: imagePath } });
+    } catch (err) {
+        console.error('Notification Save Error:', err);
+        res.status(500).json({ success: false, message: 'Failed to save notification' });
+    }
 });
 
 app.delete('/api/notification/:id', requireAuth, async (req, res) => {
