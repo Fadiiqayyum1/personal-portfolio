@@ -11,25 +11,45 @@
 <body id="home" class="bg-gray-50 text-gray-800 font-sans antialiased">
 
     <!-- NAVBAR -->
-    <nav class="sticky top-0 z-50 bg-slate-900 text-white shadow-lg">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-16">
-                <span class="text-xl font-bold tracking-wider text-indigo-400">FQ Portfolio</span>
-                <div class="hidden md:flex items-center space-x-6 text-sm font-medium">
-                    <a href="#home" class="hover:text-indigo-400 transition">Home</a>
-                    <a href="#about" class="hover:text-indigo-400 transition">About Me</a>
-                    <a href="#notifications" class="hover:text-indigo-400 transition">Notifications</a>
-                    <a href="#courses" class="hover:text-indigo-400 transition">Courses</a>
-                    <a href="#notes" class="hover:text-indigo-400 transition">Notes</a>
-                    <button id="admin-nav-btn" onclick="toggleAdminPanel()" class="text-amber-400 hover:text-amber-300 font-bold transition">
-                        <i class="fa-solid fa-lock mr-1"></i>Admin Panel
-                    </button>
-                    <a href="#contact" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-md text-white transition">Contact</a>
-                </div>
+    <!-- NAVBAR WITH MOBILE MENU SUPPORT -->
+<nav class="sticky top-0 z-50 bg-slate-900 text-white shadow-lg">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-16">
+            <span class="text-xl font-bold tracking-wider text-indigo-400">FQ Portfolio</span>
+            
+            <!-- Mobile Menu Hamburger Button -->
+            <button id="mobile-menu-btn" onclick="toggleMobileMenu()" class="md:hidden text-gray-300 hover:text-white focus:outline-none text-2xl">
+                <i class="fa-solid fa-bars" id="menu-icon"></i>
+            </button>
+
+            <!-- Desktop Links -->
+            <div class="hidden md:flex items-center space-x-6 text-sm font-medium">
+                <a href="#home" class="hover:text-indigo-400 transition">Home</a>
+                <a href="#about" class="hover:text-indigo-400 transition">About Me</a>
+                <a href="#notifications" class="hover:text-indigo-400 transition">Notifications</a>
+                <a href="#courses" class="hover:text-indigo-400 transition">Courses</a>
+                <a href="#notes" class="hover:text-indigo-400 transition">Notes</a>
+                <button id="admin-nav-btn" onclick="toggleAdminPanel()" class="text-amber-400 hover:text-amber-300 font-bold transition">
+                    <i class="fa-solid fa-lock mr-1"></i>Admin Panel
+                </button>
+                <a href="#contact" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-md text-white transition">Contact</a>
             </div>
         </div>
-    </nav>
+    </div>
 
+    <!-- Mobile Menu Drawer (Hides by default, toggles on click) -->
+    <div id="mobile-menu" class="hidden md:hidden bg-slate-950 border-b border-slate-800 px-4 pt-2 pb-4 space-y-3 font-medium text-sm">
+        <a href="#home" onclick="toggleMobileMenu()" class="block hover:text-indigo-400 py-1">Home</a>
+        <a href="#about" onclick="toggleMobileMenu()" class="block hover:text-indigo-400 py-1">About Me</a>
+        <a href="#notifications" onclick="toggleMobileMenu()" class="block hover:text-indigo-400 py-1">Notifications</a>
+        <a href="#courses" onclick="toggleMobileMenu()" class="block hover:text-indigo-400 py-1">Courses</a>
+        <a href="#notes" onclick="toggleMobileMenu()" class="block hover:text-indigo-400 py-1">Notes</a>
+        <button onclick="toggleMobileMenu(); toggleAdminPanel();" class="block w-full text-left text-amber-400 hover:text-amber-300 font-bold py-1">
+            <i class="fa-solid fa-lock mr-1"></i>Admin Panel
+        </button>
+        <a href="#contact" onclick="toggleMobileMenu()" class="inline-block bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-md text-white transition mt-2">Contact</a>
+    </div>
+</nav>
     <!-- HERO / ABOUT SECTION -->
     <section id="about" class="py-20 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-10">
@@ -241,8 +261,28 @@
     </footer>
 
     <!-- JAVASCRIPT -->
-    <script>
+   <script>
     let currentUserIsAdmin = false;
+
+    // Mobile Navbar Toggle Function
+    function toggleMobileMenu() {
+        const menu = document.getElementById('mobile-menu');
+        const icon = document.getElementById('menu-icon');
+        
+        if (menu && menu.classList.contains('hidden')) {
+            menu.classList.remove('hidden');
+            if (icon) {
+                icon.classList.remove('fa-bars');
+                icon.classList.add('fa-xmark');
+            }
+        } else if (menu) {
+            menu.classList.add('hidden');
+            if (icon) {
+                icon.classList.remove('fa-xmark');
+                icon.classList.add('fa-bars');
+            }
+        }
+    }
 
     async function fetchAppData() {
         try {
