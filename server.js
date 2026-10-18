@@ -15,10 +15,14 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Static folder for uploaded images
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir);
+// Static folder setup (Safe for Vercel /tmp or local)
+const uploadDir = path.join('/tmp', 'uploads');
+try {
+    if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+    }
+} catch (e) {
+    console.log('Upload dir creation skipped on read-only fs');
 }
 app.use('/uploads', express.static(uploadDir));
 
@@ -36,7 +40,7 @@ app.use(session({
     cookie: { secure: false }
 }));
 
-// --- MONGODB OR LOCAL JSON DATABASE SETUP ---
+// --- MONGODB ATLAS SETUP ---
 let useMongoDB = false;
 
 if (process.env.MONGO_URI) {
@@ -45,7 +49,7 @@ if (process.env.MONGO_URI) {
             console.log('Successfully connected to MongoDB Database!');
             useMongoDB = true;
         })
-        .catch(err => console.log('MongoDB Connection Error (Falling back to JSON DB):', err.message));
+        .catch(err => console.log('MongoDB Connection Error:', err.message));
 }
 
 // Mongo Schemas
@@ -54,36 +58,10 @@ const CourseSchema = new mongoose.Schema({ title: String, cat: String, desc: Str
 const NoteSchema = new mongoose.Schema({ title: String, link: String, size: String, createdAt: { type: Date, default: Date.now } });
 const ContactSchema = new mongoose.Schema({ name: String, email: String, message: String, createdAt: { type: Date, default: Date.now } });
 
-const NotifModel = mongoose.model('Notification', NotifSchema);
-const CourseModel = mongoose.model('Course', CourseSchema);
-const NoteModel = mongoose.model('Note', NoteSchema);
-const ContactModel = mongoose.model('ContactMessage', ContactSchema);
-
-// Fallback JSON DB File
-const DB_FILE = path.join(__dirname, 'database.json');
-if (!fs.existsSync(DB_FILE)) {
-    const initialData = {
-        notifications: [
-            { id: 1, title: 'AI Assignment Solutions Available', desc: 'Artificial Intelligence assignment solutions and study notes uploaded.', image: '' }
-        ],
-        courses: [
-            { id: 1, title: 'HTML, CSS & JavaScript Fundamentals', cat: 'Web Development', desc: 'Zero se responsive websites banana sikhein Tailwind CSS ke sath.' },
-            { id: 2, title: 'AI & Machine Learning Basics', cat: 'Artificial Intelligence', desc: 'Russell & Norvig Book par mabni AI concepts aur problem sets.' }
-        ],
-        notes: [
-            { id: 1, title: 'AI Formal Definitions Notes', link: '#', size: '2.4 MB' }
-        ],
-        messages: []
-    };
-    fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2));
-}
-
-const readDB = () => {
-    const data = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-    if (!data.messages) data.messages = [];
-    return data;
-};
-const writeDB = (data) => fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+const NotifModel = mongoose.models.Notification || mongoose.model('Notification', NotifSchema);
+const CourseModel = mongoose.models.Course || mongoose.model('Course', CourseSchema);
+const NoteModel = mongoose.models.Note || mongoose.model('Note', NoteSchema);
+const ContactModel = mongoose.models.ContactMessage || mongoose.model('ContactMessage', ContactSchema);
 
 // Auth Middleware
 const requireAuth = (req, res, next) => {
@@ -95,41 +73,30 @@ const requireAuth = (req, res, next) => {
 
 // --- ROUTES ---
 
-// Get Data
 app.get('/api/data', async (req, res) => {
     let messages = [];
-    if (useMongoDB) {
-        try {
-            const notifications = await NotifModel.find().sort({ createdAt: -1 });
-            const courses = await CourseModel.find().sort({ createdAt: -1 });
-            const notes = await NoteModel.find().sort({ createdAt: -1 });
-            if (req.session.isAdmin) {
-                messages = await ContactModel.find().sort({ createdAt: -1 });
-            }
-            return res.json({
-                data: {
-                    notifications: notifications.map(n => ({ id: n._id, title: n.title, desc: n.desc, image: n.image })),
-                    courses: courses.map(c => ({ id: c._id, title: c.title, cat: c.cat, desc: c.desc })),
-                    notes: notes.map(o => ({ id: o._id, title: o.title, link: o.link, size: o.size })),
-                    messages: messages.map(m => ({ id: m._id, name: m.name, email: m.email, message: m.message, date: m.createdAt }))
-                },
-                isAdmin: req.session.isAdmin || false
-            });
-        } catch (e) {
-            console.error(e);
+    try {
+        const notifications = await NotifModel.find().sort({ createdAt: -1 });
+        const courses = await CourseModel.find().sort({ createdAt: -1 });
+        const notes = await NoteModel.find().sort({ createdAt: -1 });
+        if (req.session.isAdmin) {
+            messages = await ContactModel.find().sort({ createdAt: -1 });
         }
+        return res.json({
+            data: {
+                notifications: notifications.map(n => ({ id: n._id, title: n.title, desc: n.desc, image: n.image })),
+                courses: courses.map(c => ({ id: c._id, title: c.title, cat: c.cat, desc: c.desc })),
+                notes: notes.map(o => ({ id: o._id, title: o.title, link: o.link, size: o.size })),
+                messages: messages.map(m => ({ id: m._id, name: m.name, email: m.email, message: m.message, date: m.createdAt }))
+            },
+            isAdmin: req.session.isAdmin || false
+        });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ success: false, message: 'Database Error' });
     }
-    const db = readDB();
-    res.json({ 
-        data: {
-            ...db,
-            messages: req.session.isAdmin ? db.messages : []
-        }, 
-        isAdmin: req.session.isAdmin || false 
-    });
 });
 
-// Admin Login
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
     const envUser = process.env.ADMIN_USERNAME || 'fahad';
@@ -142,116 +109,58 @@ app.post('/api/login', (req, res) => {
     res.status(401).json({ success: false, message: 'Ghalat Username ya Password!' });
 });
 
-// Admin Logout
 app.post('/api/logout', (req, res) => {
     req.session.destroy();
     res.json({ success: true, message: 'Logged out successfully.' });
 });
 
-// Notification Routes (Supports Image Upload via Multer)
 app.post('/api/notification', requireAuth, upload.single('image'), async (req, res) => {
     const { title, desc } = req.body;
     const imagePath = req.file ? `/uploads/${req.file.filename}` : '';
-
-    if (useMongoDB) {
-        const item = await NotifModel.create({ title, desc, image: imagePath });
-        return res.json({ success: true, item: { id: item._id, title, desc, image: imagePath } });
-    }
-    const db = readDB();
-    const newItem = { id: Date.now(), title, desc, image: imagePath };
-    db.notifications.unshift(newItem);
-    writeDB(db);
-    res.json({ success: true, item: newItem });
+    const item = await NotifModel.create({ title, desc, image: imagePath });
+    res.json({ success: true, item: { id: item._id, title, desc, image: imagePath } });
 });
 
 app.delete('/api/notification/:id', requireAuth, async (req, res) => {
-    if (useMongoDB) {
-        await NotifModel.findByIdAndDelete(req.params.id);
-        return res.json({ success: true });
-    }
-    const db = readDB();
-    db.notifications = db.notifications.filter(n => n.id != req.params.id);
-    writeDB(db);
+    await NotifModel.findByIdAndDelete(req.params.id);
     res.json({ success: true });
 });
 
-// Course Routes
 app.post('/api/course', requireAuth, async (req, res) => {
     const { title, cat, desc } = req.body;
-    if (useMongoDB) {
-        const item = await CourseModel.create({ title, cat, desc });
-        return res.json({ success: true, item: { id: item._id, title, cat, desc } });
-    }
-    const db = readDB();
-    const newItem = { id: Date.now(), title, cat, desc };
-    db.courses.unshift(newItem);
-    writeDB(db);
-    res.json({ success: true, item: newItem });
+    const item = await CourseModel.create({ title, cat, desc });
+    res.json({ success: true, item: { id: item._id, title, cat, desc } });
 });
 
 app.delete('/api/course/:id', requireAuth, async (req, res) => {
-    if (useMongoDB) {
-        await CourseModel.findByIdAndDelete(req.params.id);
-        return res.json({ success: true });
-    }
-    const db = readDB();
-    db.courses = db.courses.filter(c => c.id != req.params.id);
-    writeDB(db);
+    await CourseModel.findByIdAndDelete(req.params.id);
     res.json({ success: true });
 });
 
-// Note Routes
 app.post('/api/note', requireAuth, async (req, res) => {
     const { title, link, size } = req.body;
-    if (useMongoDB) {
-        const item = await NoteModel.create({ title, link, size: size || 'PDF' });
-        return res.json({ success: true, item: { id: item._id, title, link, size } });
-    }
-    const db = readDB();
-    const newItem = { id: Date.now(), title, link, size: size || 'PDF' };
-    db.notes.unshift(newItem);
-    writeDB(db);
-    res.json({ success: true, item: newItem });
+    const item = await NoteModel.create({ title, link, size: size || 'PDF' });
+    res.json({ success: true, item: { id: item._id, title, link, size } });
 });
 
 app.delete('/api/note/:id', requireAuth, async (req, res) => {
-    if (useMongoDB) {
-        await NoteModel.findByIdAndDelete(req.params.id);
-        return res.json({ success: true });
-    }
-    const db = readDB();
-    db.notes = db.notes.filter(n => n.id != req.params.id);
-    writeDB(db);
+    await NoteModel.findByIdAndDelete(req.params.id);
     res.json({ success: true });
 });
 
-// Delete Message Route
 app.delete('/api/message/:id', requireAuth, async (req, res) => {
-    if (useMongoDB) {
-        await ContactModel.findByIdAndDelete(req.params.id);
-        return res.json({ success: true });
-    }
-    const db = readDB();
-    db.messages = db.messages.filter(m => m.id != req.params.id);
-    writeDB(db);
+    await ContactModel.findByIdAndDelete(req.params.id);
     res.json({ success: true });
 });
 
-// CSV Export Route
 app.get('/api/export-messages-csv', requireAuth, async (req, res) => {
-    let messages = [];
-    if (useMongoDB) {
-        messages = await ContactModel.find().sort({ createdAt: -1 });
-    } else {
-        messages = readDB().messages;
-    }
-
+    const messages = await ContactModel.find().sort({ createdAt: -1 });
     let csvContent = "Name,Email,Message,Date\n";
     messages.forEach(m => {
         const name = `"${(m.name || '').replace(/"/g, '""')}"`;
         const email = `"${(m.email || '').replace(/"/g, '""')}"`;
         const msg = `"${(m.message || '').replace(/"/g, '""')}"`;
-        const date = `"${new Date(m.createdAt || m.date || Date.now()).toLocaleString()}"`;
+        const date = `"${new Date(m.createdAt || Date.now()).toLocaleString()}"`;
         csvContent += `${name},${email},${msg},${date}\n`;
     });
 
@@ -260,20 +169,12 @@ app.get('/api/export-messages-csv', requireAuth, async (req, res) => {
     res.status(200).send(csvContent);
 });
 
-// --- CONTACT FORM ROUTE (Nodemailer + DB Save) ---
 app.post('/api/contact', async (req, res) => {
     const { name, email, message } = req.body;
-
-    if (useMongoDB) {
-        try {
-            await ContactModel.create({ name, email, message });
-        } catch (dbErr) {
-            console.error('Database Save Error:', dbErr);
-        }
-    } else {
-        const db = readDB();
-        db.messages.unshift({ id: Date.now(), name, email, message, date: new Date() });
-        writeDB(db);
+    try {
+        await ContactModel.create({ name, email, message });
+    } catch (dbErr) {
+        console.error('Database Save Error:', dbErr);
     }
 
     const transporter = nodemailer.createTransport({
@@ -294,18 +195,15 @@ app.post('/api/contact', async (req, res) => {
 
     try {
         await transporter.sendMail(mailOptions);
-        console.log('Contact email sent successfully & saved to DB!');
         res.json({ success: true, message: 'Message sent successfully!' });
     } catch (error) {
         console.error('Nodemailer Error:', error);
-        res.json({ success: true, message: 'Saved to Database! (Email service temporarily offline).' });
+        res.json({ success: true, message: 'Saved to Database!' });
     }
 });
 
-// --- DIRECT EMAIL REPLY ROUTE (Sent from Admin Panel) ---
 app.post('/api/reply', requireAuth, async (req, res) => {
     const { toEmail, toName, replyMessage } = req.body;
-
     const transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {
@@ -323,7 +221,6 @@ app.post('/api/reply', requireAuth, async (req, res) => {
 
     try {
         await transporter.sendMail(mailOptions);
-        console.log(`Reply sent successfully to ${toEmail}`);
         res.json({ success: true, message: 'Reply sent successfully!' });
     } catch (error) {
         console.error('Reply Email Error:', error);
@@ -331,6 +228,11 @@ app.post('/api/reply', requireAuth, async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running securely on http://localhost:${PORT}`);
-});
+// Local listen check
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(PORT, () => {
+        console.log(`Server running securely on http://localhost:${PORT}`);
+    });
+}
+
+module.exports = app;
