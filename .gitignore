@@ -1,0 +1,13 @@
+# Secret Environment Variables
+.env
+
+# Dependencies
+node_modules/
+
+# Local Database & Uploaded Images
+database.json
+uploads/
+
+# System Files
+.DS_Store
+Thumbs.db
