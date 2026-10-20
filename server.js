@@ -74,11 +74,11 @@ const requireAuth = (req, res, next) => {
 app.get('/api/data', async (req, res) => {
     let messages = [];
     try {
-        const notifications = await NotifModel.find().sort({ _id: -1 });
-        const courses = await CourseModel.find().sort({ _id: -1 });
-        const notes = await NoteModel.find().sort({ _id: -1 });
+        const notifications = await NotifModel.find().sort({ _id: -1 }).maxTimeMS(30000);
+        const courses = await CourseModel.find().sort({ _id: -1 }).maxTimeMS(30000);
+        const notes = await NoteModel.find().sort({ _id: -1 }).maxTimeMS(30000);
         if (req.session.isAdmin) {
-            messages = await ContactModel.find().sort({ _id: -1 });
+            messages = await ContactModel.find().sort({ _id: -1 }).maxTimeMS(30000);
         }
         return res.json({
             data: {
@@ -94,7 +94,6 @@ app.get('/api/data', async (req, res) => {
         res.status(500).json({ success: false, message: 'Database Error' });
     }
 });
-
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
     const envUser = process.env.ADMIN_USERNAME || 'fahad';
