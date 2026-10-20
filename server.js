@@ -74,11 +74,11 @@ const requireAuth = (req, res, next) => {
 app.get('/api/data', async (req, res) => {
     let messages = [];
     try {
-        const notifications = await NotifModel.find().sort({ createdAt: -1 });
-        const courses = await CourseModel.find().sort({ createdAt: -1 });
-        const notes = await NoteModel.find().sort({ createdAt: -1 });
+        const notifications = await NotifModel.find().sort({ _id: -1 });
+        const courses = await CourseModel.find().sort({ _id: -1 });
+        const notes = await NoteModel.find().sort({ _id: -1 });
         if (req.session.isAdmin) {
-            messages = await ContactModel.find().sort({ createdAt: -1 });
+            messages = await ContactModel.find().sort({ _id: -1 });
         }
         return res.json({
             data: {
@@ -90,7 +90,7 @@ app.get('/api/data', async (req, res) => {
             isAdmin: req.session.isAdmin || false
         });
     } catch (e) {
-        console.error(e);
+        console.error("Data Fetch Error:", e);
         res.status(500).json({ success: false, message: 'Database Error' });
     }
 });
@@ -164,7 +164,7 @@ app.delete('/api/message/:id', requireAuth, async (req, res) => {
 });
 
 app.get('/api/export-messages-csv', requireAuth, async (req, res) => {
-    const messages = await ContactModel.find().sort({ createdAt: -1 });
+    const messages = await ContactModel.find().sort({ _id: -1 });
     let csvContent = "Name,Email,Message,Date\n";
     messages.forEach(m => {
         const name = `"${(m.name || '').replace(/"/g, '""')}"`;
