@@ -11,8 +11,9 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Increased body size limit to 10mb for Vercel Base64 uploads
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Static folder setup (Safe for Vercel /tmp or local)
@@ -26,8 +27,7 @@ try {
 }
 app.use('/uploads', express.static(uploadDir));
 
-// Multer Storage Setup for Notifications Image
-// Memory storage for Vercel serverless environment
+// Multer Memory Storage Setup for Vercel serverless environment
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
@@ -50,9 +50,9 @@ if (process.env.MONGO_URI) {
         .catch(err => console.log('MongoDB Connection Error:', err.message));
 }
 
-// Mongo Schemas
+// Mongo Schemas (Added image field to CourseSchema)
 const NotifSchema = new mongoose.Schema({ title: String, desc: String, image: String, createdAt: { type: Date, default: Date.now } });
-const CourseSchema = new mongoose.Schema({ title: String, cat: String, desc: String, createdAt: { type: Date, default: Date.now } });
+const CourseSchema = new mongoose.Schema({ title: String, cat: String, desc: String, image: String, createdAt: { type: Date, default: Date.now } });
 const NoteSchema = new mongoose.Schema({ title: String, link: String, size: String, createdAt: { type: Date, default: Date.now } });
 const ContactSchema = new mongoose.Schema({ name: String, email: String, message: String, createdAt: { type: Date, default: Date.now } });
 
@@ -83,7 +83,7 @@ app.get('/api/data', async (req, res) => {
         return res.json({
             data: {
                 notifications: notifications.map(n => ({ id: n._id, title: n.title, desc: n.desc, image: n.image })),
-                courses: courses.map(c => ({ id: c._id, title: c.title, cat: c.cat, desc: c.desc })),
+                courses: courses.map(c => ({ id: c._id, title: c.title, cat: c.cat, desc: c.desc, image: c.image })),
                 notes: notes.map(o => ({ id: o._id, title: o.title, link: o.link, size: o.size })),
                 messages: messages.map(m => ({ id: m._id, name: m.name, email: m.email, message: m.message, date: m.createdAt }))
             },
@@ -117,7 +117,6 @@ app.post('/api/notification', requireAuth, upload.single('image'), async (req, r
     let imagePath = '';
 
     if (req.file) {
-        // Convert uploaded file to Base64 data string for Vercel cloud persistence
         const mimeType = req.file.mimetype || 'image/png';
         imagePath = `data:${mimeType};base64,${req.file.buffer.toString('base64')}`;
     }
@@ -136,10 +135,23 @@ app.delete('/api/notification/:id', requireAuth, async (req, res) => {
     res.json({ success: true });
 });
 
-app.post('/api/course', requireAuth, async (req, res) => {
+// Updated Course Route with Multer Image Support
+app.post('/api/course', requireAuth, upload.single('image'), async (req, res) => {
     const { title, cat, desc } = req.body;
-    const item = await CourseModel.create({ title, cat, desc });
-    res.json({ success: true, item: { id: item._id, title, cat, desc } });
+    let imagePath = '';
+
+    if (req.file) {
+        const mimeType = req.file.mimetype || 'image/png';
+        imagePath = `data:${mimeType};base64,${req.file.buffer.toString('base64')}`;
+    }
+
+    try {
+        const item = await CourseModel.create({ title, cat, desc, image: imagePath });
+        res.json({ success: true, item: { id: item._id, title, cat, desc, image: imagePath } });
+    } catch (err) {
+        console.error('Course Save Error:', err);
+        res.status(500).json({ success: false, message: 'Failed to save course' });
+    }
 });
 
 app.delete('/api/course/:id', requireAuth, async (req, res) => {
@@ -147,10 +159,23 @@ app.delete('/api/course/:id', requireAuth, async (req, res) => {
     res.json({ success: true });
 });
 
-app.post('/api/note', requireAuth, async (req, res) => {
-    const { title, link, size } = req.body;
-    const item = await NoteModel.create({ title, link, size: size || 'PDF' });
-    res.json({ success: true, item: { id: item._id, title, link, size } });
+// Updated Note Route with Multer File/PDF Support
+app.post('/api/note', requireAuth, upload.single('file'), async (req, res) => {
+    const { title, size } = req.body;
+    let fileLink = '';
+
+    if (req.file) {
+        const mimeType = req.file.mimetype || 'application/pdf';
+        fileLink = `data:${mimeType};base64,${req.file.buffer.toString('base64')}`;
+    }
+
+    try {
+        const item = await NoteModel.create({ title, link: fileLink, size: size || 'PDF Document' });
+        res.json({ success: true, item: { id: item._id, title, link: fileLink, size } });
+    } catch (err) {
+        console.error('Note Save Error:', err);
+        res.status(500).json({ success: false, message: 'Failed to upload note file' });
+    }
 });
 
 app.delete('/api/note/:id', requireAuth, async (req, res) => {
