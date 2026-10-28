@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://personal-portfolio-eight-eta-52.vercel.app/sitemap.xml
